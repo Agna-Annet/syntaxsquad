@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Analysis</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .emotion-bar {
+            transition: width 0.6s ease-in-out;
+        }
+        .emotion-icon {
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chart-container {
+            height: 300px;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h1 class="text-3xl font-bold text-center mb-8 text-indigo-600">
+                    <i class="fas fa-brain mr-2"></i>Emotion Analysis
+                </h1>
+                
+                <div class="mb-6">
+                    <textarea 
+                        id="textInput" 
+                        class="w-full p-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-32"
+                        placeholder="Enter your text here..."
+                    ></textarea>
+                </div>
+
+                <div class="text-center mb-6">
+                    <button 
+                        id="analyzeBtn"
+                        class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition duration-200 flex items-center justify-center mx-auto"
+                    >
+                        <i class="fas fa-search mr-2"></i>
+                        Analyze Emotions
+                    </button>
+                </div>
+
+                <div id="loadingIndicator" class="hidden text-center mb-4">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+                </div>
+
+                <div id="result" class="hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h2 class="text-xl font-semibold mb-4 text-gray-700">Emotion Analysis Results:</h2>
+                            <div id="emotionResults" class="space-y-4">
+                                <!-- Results will be inserted here -->
+                            </div>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-semibold mb-4 text-gray-700">Visualization:</h2>
+                            <div id="plotlyChart" class="chart-container">
+                                <!-- Plotly chart will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="error" class="hidden text-red-500 text-center mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const emotionIcons = {
+            'happy': '😊',
+            'sadness': '😢',
+            'angry': '😠',
+            'fear': '😨',
+            'disgust': '🤢',
+            'neutral': '😐'
+        };
+
+        const emotionColors = {
+            'happy': '#10B981',  // green-500
+            'sadness': '#3B82F6', // blue-500
+            'angry': '#EF4444',   // red-500
+            'fear': '#8B5CF6',    // purple-500
+            'disgust': '#F59E0B', // yellow-500
+            'neutral': '#6B7280'  // gray-500
+        };
+
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const text = document.getElementById('textInput').value.trim();
+            if (!text) {
+                showError('Please enter some text to analyze.');
+                return;
+            }
+
+            // Show loading indicator
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResults(data.result);
+                } else {
+                    showError(data.error || 'An error occurred during analysis.');
+                }
+            } catch (error) {
+                showError('Failed to connect to the server.');
+            } finally {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+            }
+        });
+
+        function displayResults(emotions) {
+            const resultDiv = document.getElementById('result');
+            const emotionResultsDiv = document.getElementById('emotionResults');
+            emotionResultsDiv.innerHTML = ''; // Clear previous results
+
+            // Convert emotions object to array for sorting
+            const emotionEntries = Object.entries(emotions)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value); // Sort by value in descending order
+
+            // Create bars for each emotion
+            emotionEntries.forEach(({ name, value }) => {
+                const emotionBar = document.createElement('div');
+                emotionBar.className = 'mb-4';
+                emotionBar.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-gray-700 font-medium flex items-center">
+                            <span class="emotion-icon mr-2">${emotionIcons[name] || ''}</span>
+                            ${name}
+                        </span>
+                        <span class="text-gray-600">${value}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="emotion-bar h-2.5 rounded-full" 
+                             style="width: 0%; background-color: ${emotionColors[name] || '#6366F1'}"></div>
+                    </div>
+                `;
+                
+                emotionResultsDiv.appendChild(emotionBar);
+                
+                // Trigger animation after a short delay
+                setTimeout(() => {
+                    const bar = emotionBar.querySelector('.emotion-bar');
+                    bar.style.width = `${value}%`;
+                }, 100);
+            });
+
+            // Create Plotly visualization
+            const plotData = [{
+                type: 'pie',
+                values: emotionEntries.map(e => e.value),
+                labels: emotionEntries.map(e => e.name),
+                textinfo: 'label+percent',
+                textposition: 'inside',
+                automargin: true,
+                marker: {
+                    colors: emotionEntries.map(e => emotionColors[e.name] || '#6366F1')
+                },
+                hovertemplate: '%{label}: %{value}%<extra></extra>'
+            }];
+
+            const layout = {
+                showlegend: false,
+                margin: { t: 0, b: 0, l: 0, r: 0 },
+                height: 300,
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
+            };
+
+            Plotly.newPlot('plotlyChart', plotData, layout, {
+                displayModeBar: false,
+                responsive: true
+            });
+
+            resultDiv.classList.remove('hidden');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        // Add keypress event listener for textarea
+        document.getElementById('textInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('analyzeBtn').click();
+            }
+        });
+
+        // Handle window resize for Plotly
+        window.addEventListener('resize', function() {
+            Plotly.Plots.resize('plotlyChart');
+        });
+    </script>
+</body>
+</html>
